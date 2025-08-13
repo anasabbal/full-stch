@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: cron-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  backend:
+    build: ./cron-backend
+    container_name: backend
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - USE_CLUSTER=true
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  frontend:
+    build: ./cron-frontend
+    container_name: frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  notification:
+    build: ./notification-service
+    container_name: notification
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+    restart: unless-stopped
+
+volumes:
+  redis_data:
