@@ -36,3 +36,31 @@ export interface ServiceStatus {
     activeTasks: number;
     totalJobs: number;
 }
+// Add GraphQL response types
+export interface GetCronJobsData {
+    cronJobs: CronJob[];
+}
+
+export interface GetCronJobData {
+    cronJob: CronJob;
+}
+
+export interface CreateCronJobData {
+    createCronJob: CronJob;
+}
+
+export interface UpdateCronJobData {
+    updateCronJob: CronJob;
+}
+
+export interface DeleteCronJobData {
+    deleteCronJob: boolean;
+}
+
+export interface ServiceStatusData {
+    serviceStatus: ServiceStatus;
+}
+
+export interface HealthCheckData {
+    health: string;
+}

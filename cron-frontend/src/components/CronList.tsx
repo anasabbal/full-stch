@@ -14,15 +14,23 @@ import {
     AlertTriangle,
     Copy,
     CheckCircle,
-    MoreVertical
+    MoreVertical,
+    RefreshCw
 } from 'lucide-react';
 import CronForm from './CronForm';
 import clsx from 'clsx';
-import { CronJob } from '../types';
+import {
+    CronJob,
+    GetCronJobsData,
+    UpdateCronJobData,
+    DeleteCronJobData,
+    UpdateCronInput
+} from '../types';
 
 const CronList: React.FC = () => {
-    const { data, loading, error, refetch } = useQuery(GET_CRON_JOBS, {
-        pollInterval: 30000, // Refresh every 30 seconds
+    // Properly type the useQuery hook
+    const { data, loading, error, refetch } = useQuery<GetCronJobsData>(GET_CRON_JOBS, {
+        pollInterval: 30000,
         errorPolicy: 'all',
     });
 
@@ -31,12 +39,30 @@ const CronList: React.FC = () => {
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
 
-    const [deleteCronJob] = useMutation(DELETE_CRON_JOB, {
+    // Properly type the mutations
+    const [deleteCronJob] = useMutation<DeleteCronJobData, { id: string }>(DELETE_CRON_JOB, {
         refetchQueries: [{ query: GET_CRON_JOBS }],
     });
 
-    const [updateCronJob] = useMutation(UPDATE_CRON_JOB, {
+    const [updateCronJob] = useMutation<UpdateCronJobData, { input: UpdateCronInput }>(UPDATE_CRON_JOB, {
         refetchQueries: [{ query: GET_CRON_JOBS }],
+        update: (cache, { data: updateData }) => {
+            if (updateData?.updateCronJob) {
+                const existingData = cache.readQuery<GetCronJobsData>({ query: GET_CRON_JOBS });
+                if (existingData?.cronJobs) {
+                    cache.writeQuery<GetCronJobsData>({
+                        query: GET_CRON_JOBS,
+                        data: {
+                            cronJobs: existingData.cronJobs.map((job: CronJob) =>
+                                job.id === updateData.updateCronJob.id
+                                    ? { ...job, ...updateData.updateCronJob }
+                                    : job
+                            ),
+                        },
+                    });
+                }
+            }
+        },
     });
 
     const handleDelete = async (id: string) => {
@@ -89,42 +115,31 @@ const CronList: React.FC = () => {
         setExpandedJobs(newExpanded);
     };
 
-    // Enhanced date formatting function
     const formatDate = (dateString?: string | null) => {
-        // Handle null, undefined, or empty string
         if (!dateString || dateString === 'null' || dateString === 'undefined') {
             return 'Never';
         }
 
         try {
-            // Convert string to Date object
             let date: Date;
 
-            // Handle different date formats
             if (typeof dateString === 'string') {
-                // Handle ISO string format
                 if (dateString.includes('T') || dateString.includes('Z')) {
                     date = new Date(dateString);
-                }
-                // Handle timestamp format
-                else if (/^\d+$/.test(dateString)) {
+                } else if (/^\d+$/.test(dateString)) {
                     date = new Date(parseInt(dateString));
-                }
-                // Handle other string formats
-                else {
+                } else {
                     date = new Date(dateString);
                 }
             } else {
                 date = new Date(dateString);
             }
 
-            // Check if date is valid
             if (isNaN(date.getTime())) {
                 console.warn('Invalid date received:', dateString);
                 return 'Invalid date';
             }
 
-            // Format the date
             return date.toLocaleString('en-US', {
                 year: 'numeric',
                 month: 'short',
@@ -139,8 +154,7 @@ const CronList: React.FC = () => {
         }
     };
 
-    // Enhanced relative time function
-    const getRelativeTime = (dateString?: string | null) => {
+    const getRelativeTime = (dateString?: string | null, isFuture = false) => {
         if (!dateString || dateString === 'null' || dateString === 'undefined') {
             return null;
         }
@@ -150,34 +164,39 @@ const CronList: React.FC = () => {
             if (isNaN(date.getTime())) return null;
 
             const now = new Date();
-            const diffMs = now.getTime() - date.getTime();
+            const diffMs = isFuture ? date.getTime() - now.getTime() : now.getTime() - date.getTime();
             const diffMins = Math.floor(diffMs / 60000);
             const diffHours = Math.floor(diffMins / 60);
             const diffDays = Math.floor(diffHours / 24);
 
-            if (diffMins < 1) return 'Just now';
-            if (diffMins < 60) return `${diffMins}m ago`;
-            if (diffHours < 24) return `${diffHours}h ago`;
-            return `${diffDays}d ago`;
+            if (isFuture) {
+                if (diffMins < 1) return 'in less than a minute';
+                if (diffMins < 60) return `in ${diffMins}m`;
+                if (diffHours < 24) return `in ${diffHours}h`;
+                return `in ${diffDays}d`;
+            } else {
+                if (diffMins < 1) return 'Just now';
+                if (diffMins < 60) return `${diffMins}m ago`;
+                if (diffHours < 24) return `${diffHours}h ago`;
+                return `${diffDays}d ago`;
+            }
         } catch {
             return null;
         }
     };
 
-    // Debug function to log raw data
     const debugJobData = (job: CronJob) => {
         console.log('Raw job data:', {
             id: job.id,
+            schedule: job.schedule,
+            timeZone: job.timeZone,
             createdAt: job.createdAt,
             lastRun: job.lastRun,
             nextRun: job.nextRun,
-            createdAtType: typeof job.createdAt,
-            lastRunType: typeof job.lastRun,
-            nextRunType: typeof job.nextRun,
+            updatedAt: job.updatedAt,
         });
     };
 
-    // Check if we're in development mode using Vite's environment variable
     const isDevelopment = import.meta.env.DEV;
 
     const getStatusColor = (isActive: boolean) => {
@@ -192,6 +211,11 @@ const CronList: React.FC = () => {
             DELETE: 'method-delete',
         };
         return colors[method as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+    };
+
+    const handleEditSuccess = () => {
+        setEditingJob(null);
+        refetch();
     };
 
     if (loading) {
@@ -225,21 +249,25 @@ const CronList: React.FC = () => {
         );
     }
 
+    // Use optional chaining and provide fallback
+    const cronJobs = data?.cronJobs || [];
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">CRON Jobs</h2>
                     <p className="text-gray-600 mt-1">
-                        {data?.cronJobs?.length || 0} job(s) configured
+                        {cronJobs.length} job(s) configured
                     </p>
                 </div>
                 <button
                     onClick={() => refetch()}
-                    className="btn-secondary text-sm"
+                    className="btn-secondary text-sm flex items-center space-x-2"
                     disabled={loading}
                 >
-                    Refresh
+                    <RefreshCw className="h-4 w-4" />
+                    <span>Refresh</span>
                 </button>
             </div>
 
@@ -250,19 +278,20 @@ const CronList: React.FC = () => {
                         <CronForm
                             initialData={editingJob}
                             isEditing={true}
-                            onSuccess={() => setEditingJob(null)}
+                            onSuccess={handleEditSuccess}
                             onCancel={() => setEditingJob(null)}
                         />
                     </div>
                 </div>
             )}
+
             {/* Jobs Grid */}
             <div className="grid gap-4">
-                {data?.cronJobs?.map((job: CronJob) => {
+                {cronJobs.map((job: CronJob) => {
                     const isExpanded = expandedJobs.has(job.id);
                     const relativeLastRun = getRelativeTime(job.lastRun);
+                    const relativeNextRun = getRelativeTime(job.nextRun, true);
 
-                    // Debug log for troubleshooting
                     if (isDevelopment) {
                         debugJobData(job);
                     }
@@ -299,15 +328,15 @@ const CronList: React.FC = () => {
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <span className={clsx('status-badge', getStatusColor(job.isActive))}>
-                        {job.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                                            <span className={clsx('status-badge', getStatusColor(job.isActive))}>
+                                                {job.isActive ? 'Active' : 'Inactive'}
+                                            </span>
                                             <span className={clsx('status-badge', getMethodColor(job.httpMethod))}>
-                        {job.httpMethod}
-                      </span>
+                                                {job.httpMethod}
+                                            </span>
                                             <span className="status-badge bg-purple-100 text-purple-800">
-                        {job.timeZone}
-                      </span>
+                                                {job.timeZone}
+                                            </span>
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-600">
@@ -325,18 +354,23 @@ const CronList: React.FC = () => {
                                                 <div className="flex items-center space-x-2">
                                                     <span className="text-green-500 text-sm">✓</span>
                                                     <span>
-                            <strong>Last Run:</strong> {formatDate(job.lastRun)}
+                                                        <strong>Last Run:</strong> {formatDate(job.lastRun)}
                                                         {relativeLastRun && (
                                                             <span className="text-gray-500 ml-1">({relativeLastRun})</span>
                                                         )}
-                          </span>
+                                                    </span>
                                                 </div>
                                             )}
 
                                             {job.nextRun && job.nextRun !== 'null' && (
                                                 <div className="flex items-center space-x-2">
                                                     <span className="text-blue-500 text-sm">⏰</span>
-                                                    <span><strong>Next Run:</strong> {formatDate(job.nextRun)}</span>
+                                                    <span>
+                                                        <strong>Next Run:</strong> {formatDate(job.nextRun)}
+                                                        {relativeNextRun && (
+                                                            <span className="text-blue-500 ml-1">({relativeNextRun})</span>
+                                                        )}
+                                                    </span>
                                                 </div>
                                             )}
                                         </div>
@@ -377,13 +411,18 @@ const CronList: React.FC = () => {
                                                     ? 'text-orange-600 hover:bg-orange-100'
                                                     : 'text-green-600 hover:bg-green-100'
                                             )}
+                                            title={job.isActive ? 'Pause job' : 'Resume job'}
                                         >
                                             {job.isActive ? <Pause size={18} /> : <Play size={18} />}
                                         </button>
 
                                         <button
-                                            onClick={() => setEditingJob(job)}
+                                            onClick={() => {
+                                                console.log('Edit button clicked for job:', job);
+                                                setEditingJob(job);
+                                            }}
                                             className="p-2 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                                            title="Edit job"
                                         >
                                             <Edit size={18} />
                                         </button>
@@ -392,6 +431,7 @@ const CronList: React.FC = () => {
                                             onClick={() => handleDelete(job.id)}
                                             disabled={deletingId === job.id}
                                             className="p-2 text-red-600 hover:bg-red-100 rounded-md transition-colors disabled:opacity-50"
+                                            title="Delete job"
                                         >
                                             {deletingId === job.id ? (
                                                 <Loader2 size={18} className="animate-spin" />
@@ -403,6 +443,7 @@ const CronList: React.FC = () => {
                                         <button
                                             onClick={() => toggleExpanded(job.id)}
                                             className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                                            title={isExpanded ? 'Collapse details' : 'Expand details'}
                                         >
                                             <MoreVertical size={18} className={clsx(
                                                 'transition-transform duration-200',
@@ -412,7 +453,6 @@ const CronList: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Progress Bar for Active Jobs */}
                                 {job.isActive && (
                                     <div className="mt-4 pt-4 border-t border-gray-100">
                                         <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
@@ -430,7 +470,7 @@ const CronList: React.FC = () => {
                 })}
 
                 {/* Empty State */}
-                {(!data?.cronJobs || data.cronJobs.length === 0) && (
+                {cronJobs.length === 0 && (
                     <div className="card p-12 text-center">
                         <Clock className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-gray-900 mb-2">

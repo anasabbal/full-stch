@@ -49,25 +49,56 @@ const CronForm: React.FC<CronFormProps> = ({
         Boolean(initialData?.body) || (initialData?.httpMethod !== 'GET')
     );
 
+    // Create proper default values
+    const getDefaultValues = (): CronFormData => {
+        if (initialData) {
+            return {
+                uri: initialData.uri,
+                httpMethod: initialData.httpMethod,
+                body: initialData.body || '',
+                schedule: initialData.schedule,
+                timeZone: initialData.timeZone,
+            };
+        }
+        return {
+            uri: '',
+            httpMethod: 'POST',
+            body: '',
+            schedule: '*/5 * * * *',
+            timeZone: 'UTC',
+        };
+    };
+
     const {
         register,
         handleSubmit,
         reset,
         watch,
         setValue,
-        formState: { errors, isDirty }
+        formState: { errors }
     } = useForm<CronFormData>({
-        defaultValues: initialData || {
-            uri: '',
-            httpMethod: 'POST',
-            body: '',
-            schedule: '*/5 * * * *',
-            timeZone: 'UTC',
-        }
+        defaultValues: getDefaultValues()
     });
 
     const watchedMethod = watch('httpMethod');
     const watchedSchedule = watch('schedule');
+
+    // Reset form when initialData changes (for editing mode)
+    useEffect(() => {
+        if (initialData && isEditing) {
+            console.log('Resetting form with initialData:', initialData);
+            reset({
+                uri: initialData.uri,
+                httpMethod: initialData.httpMethod,
+                body: initialData.body || '',
+                schedule: initialData.schedule,
+                timeZone: initialData.timeZone,
+            });
+
+            // set body field visibility based on method
+            setShowBodyField(Boolean(initialData.body) || initialData.httpMethod !== 'GET');
+        }
+    }, [initialData, isEditing, reset]);
 
     useEffect(() => {
         if (watchedMethod === 'GET') {
@@ -87,27 +118,41 @@ const CronForm: React.FC<CronFormProps> = ({
     });
 
     const onSubmit = async (data: CronFormData) => {
+        console.log('Form submitted with data:', data);
+        console.log('Is editing:', isEditing);
+        console.log('Initial data:', initialData);
+
         setIsSubmitting(true);
         try {
             if (isEditing && initialData) {
-                await updateCronJob({
+                console.log('Updating cron job with ID:', initialData.id);
+                const result = await updateCronJob({
                     variables: {
                         input: {
-                            ...data,
                             id: initialData.id,
-                            body: data.body || undefined
+                            uri: data.uri,
+                            httpMethod: data.httpMethod,
+                            body: data.body || null,
+                            schedule: data.schedule,
+                            timeZone: data.timeZone,
                         }
                     }
                 });
+                console.log('Update result:', result);
             } else {
-                await createCronJob({
+                console.log('Creating new cron job');
+                const result = await createCronJob({
                     variables: {
                         input: {
-                            ...data,
-                            body: data.body || undefined
+                            uri: data.uri,
+                            httpMethod: data.httpMethod,
+                            body: data.body || null,
+                            schedule: data.schedule,
+                            timeZone: data.timeZone,
                         }
                     }
                 });
+                console.log('Create result:', result);
             }
 
             if (!isEditing) {
@@ -116,6 +161,8 @@ const CronForm: React.FC<CronFormProps> = ({
             onSuccess?.();
         } catch (error: any) {
             console.error('Failed to save cron job:', error);
+            console.error('GraphQL errors:', error.graphQLErrors);
+            console.error('Network error:', error.networkError);
             alert(`Error: ${error.message}`);
         } finally {
             setIsSubmitting(false);
@@ -145,6 +192,12 @@ const CronForm: React.FC<CronFormProps> = ({
                         <p className="text-sm text-gray-600 mt-1">
                             {isEditing ? 'Update your scheduled task configuration' : 'Schedule a new automated task'}
                         </p>
+                        {/* Debug info in development */}
+                        {process.env.NODE_ENV === 'development' && isEditing && (
+                            <p className="text-xs text-blue-600 mt-1">
+                                Editing job ID: {initialData?.id}
+                            </p>
+                        )}
                     </div>
                     {onCancel && (
                         <button
@@ -313,19 +366,19 @@ const CronForm: React.FC<CronFormProps> = ({
                     <div className="flex space-x-3 pt-4">
                         <button
                             type="submit"
-                            disabled={isSubmitting || (!isDirty && isEditing)}
+                            disabled={isSubmitting}
                             className={clsx(
                                 'flex-1 flex items-center justify-center space-x-2 btn-primary',
-                                (isSubmitting || (!isDirty && isEditing)) && 'opacity-50 cursor-not-allowed'
+                                isSubmitting && 'opacity-50 cursor-not-allowed'
                             )}
                         >
                             <Save className="h-4 w-4" />
                             <span>
-                {isSubmitting
-                    ? (isEditing ? 'Updating...' : 'Creating...')
-                    : (isEditing ? 'Update CRON Job' : 'Create CRON Job')
-                }
-              </span>
+                                {isSubmitting
+                                    ? (isEditing ? 'Updating...' : 'Creating...')
+                                    : (isEditing ? 'Update CRON Job' : 'Create CRON Job')
+                                }
+                            </span>
                         </button>
 
                         {onCancel && (
