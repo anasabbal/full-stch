@@ -256,19 +256,6 @@ const CronList: React.FC = () => {
                     </div>
                 </div>
             )}
-
-            {/* Debug Panel (remove in production) */}
-            {isDevelopment && data?.cronJobs?.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded p-4 text-xs">
-                    <strong>Debug Info (first job):</strong>
-                    <pre>{JSON.stringify({
-                        createdAt: data.cronJobs[0].createdAt,
-                        lastRun: data.cronJobs[0].lastRun,
-                        nextRun: data.cronJobs[0].nextRun,
-                    }, null, 2)}</pre>
-                </div>
-            )}
-
             {/* Jobs Grid */}
             <div className="grid gap-4">
                 {data?.cronJobs?.map((job: CronJob) => {

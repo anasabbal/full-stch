@@ -1,37 +1,37 @@
 import request from 'supertest';
 import fs from 'fs';
 
-// mock fs before importing the app
+// Mock fs before importing the app
 jest.mock('fs');
 const mockedFs = fs as jest.Mocked<typeof fs>;
 
-// store original console methods to restore later
+// Mock console to avoid noise
 const originalLog = console.log;
 const originalError = console.error;
 
-describe('notification service server', () => {
+describe('Notification Service Server', () => {
     let app: any;
 
     beforeAll(async () => {
-        // set test environment
+        // Set test environment
         process.env.NODE_ENV = 'test';
 
-        // mock console to avoid test noise
+        // Mock console
         console.log = jest.fn();
         console.error = jest.fn();
 
-        // mock fs behavior
+        // Setup fs mocks
         mockedFs.existsSync.mockReturnValue(true);
         mockedFs.mkdirSync.mockImplementation(() => undefined);
         mockedFs.appendFileSync.mockImplementation(() => undefined);
         mockedFs.readFileSync.mockReturnValue('');
 
-        // import app after mocks are set
+        // Import app after setting up mocks
         app = (await import('./server')).default;
     });
 
     afterAll(() => {
-        // restore console behavior
+        // Restore console
         console.log = originalLog;
         console.error = originalError;
     });
@@ -40,17 +40,17 @@ describe('notification service server', () => {
         jest.clearAllMocks();
     });
 
-    it('should return service info on get /', async () => {
+    it('should return service info on GET /', async () => {
         const response = await request(app).get('/');
 
         expect(response.status).toBe(200);
-        expect(response.body.service).toBe('CRON Notification Service');
+        expect(response.body.service).toBe('cron notification service');
         expect(response.body.version).toBe('1.0.0');
         expect(response.body.status).toBe('running');
     });
 
-    it('should handle post to /webhook', async () => {
-        const testData = { message: '2024-01-01 09:00:00 - test notification' };
+    it('should handle POST to /webhook', async () => {
+        const testData = { message: '2024-01-01 09:00:00 - Test notification' };
 
         const response = await request(app)
             .post('/webhook')
@@ -62,7 +62,7 @@ describe('notification service server', () => {
         expect(response.body.receivedData).toEqual(testData);
     });
 
-    it('should handle get to /webhook', async () => {
+    it('should handle GET to /webhook', async () => {
         const response = await request(app).get('/webhook');
 
         expect(response.status).toBe(200);
@@ -70,8 +70,8 @@ describe('notification service server', () => {
         expect(response.body.method).toBe('GET');
     });
 
-    it('should handle put to /webhook', async () => {
-        const testData = { message: '2024-01-01 10:00:00 - put notification' };
+    it('should handle PUT to /webhook', async () => {
+        const testData = { message: '2024-01-01 10:00:00 - PUT notification' };
 
         const response = await request(app)
             .put('/webhook')
@@ -81,7 +81,7 @@ describe('notification service server', () => {
         expect(response.body.method).toBe('PUT');
     });
 
-    it('should handle delete to /webhook', async () => {
+    it('should handle DELETE to /webhook', async () => {
         const response = await request(app).delete('/webhook');
 
         expect(response.status).toBe(200);
@@ -89,7 +89,7 @@ describe('notification service server', () => {
     });
 
     it('should log messages correctly', async () => {
-        const cronMessage = '2024-01-01 09:00:00 - daily backup';
+        const cronMessage = '2024-01-01 09:00:00 - Daily backup';
 
         await request(app)
             .post('/webhook')
@@ -108,18 +108,18 @@ describe('notification service server', () => {
         const response = await request(app).get('/health');
 
         expect(response.status).toBe(200);
-        expect(response.body.status).toBe('OK');
-        expect(response.body.service).toBe('Notification Service');
+        expect(response.body.status).toBe('ok');
+        expect(response.body.service).toBe('notification service');
     });
 
     it('should handle test endpoints', async () => {
         const getResponse = await request(app).get('/test');
         expect(getResponse.status).toBe(200);
-        expect(getResponse.body.message).toBe('GET test successful');
+        expect(getResponse.body.message).toBe('get test successful');
 
         const postResponse = await request(app).post('/test').send({ test: 'data' });
         expect(postResponse.status).toBe(200);
-        expect(postResponse.body.message).toBe('POST test successful');
+        expect(postResponse.body.message).toBe('post test successful');
     });
 
     it('should return logs', async () => {
@@ -135,17 +135,17 @@ describe('notification service server', () => {
         const response = await request(app).get('/unknown');
 
         expect(response.status).toBe(404);
-        expect(response.body.error).toBe('Endpoint not found');
+        expect(response.body.error).toBe('endpoint not found');
     });
 
     it('should handle logging errors gracefully', async () => {
         mockedFs.appendFileSync.mockImplementation(() => {
-            throw new Error('file error');
+            throw new Error('File error');
         });
 
         const response = await request(app)
             .post('/webhook')
-            .send({ message: 'test' });
+            .send({ message: 'Test' });
 
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(true);

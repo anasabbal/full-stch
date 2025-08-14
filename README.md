@@ -2,7 +2,7 @@
 
 A complete CRON job management system with GraphQL backend, React frontend, and notification service.
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - **Docker & Docker Compose** (recommended)
@@ -45,28 +45,29 @@ sudo systemctl start redis-server
 choco install redis-64
 redis-server
 ```
-
-
-
+Backend
+![Redis Setup Screenshot](./screenshot/multi-instance.png)
+Frontend
+![Redis Setup Screenshot](./screenshot/frontend-run.png)
+Nootification Service
+![Redis Setup Screenshot](./screenshot/notification-service.png)
 #### Step 2: Start Services
 ```bash
-# Backend (Terminal 1)
+# Backend (terminal 1)
 cd cron-backend
 npm install
 npm run dev                    # Runs on :4000
-
-# Frontend (Terminal 2)
+# Frontend (terminal 2)
 cd cron-frontend
 npm install
 npm run dev                    # Runs on :3000
-
-# Notification Service (Terminal 3)
+# Notification Service (terminal 3)
 cd notification-service
 npm install
 npm run dev                    # Runs on :3001
 ```
 
-### 🌐 Service URLs
+###  Service URLs
 | Service              | URL                                  | Description            |
 |----------------------|--------------------------------------|------------------------|
 | Frontend             | http://localhost:3000                | Web interface          |
@@ -75,17 +76,17 @@ npm run dev                    # Runs on :3001
 | Health Check         | http://localhost:4000/health         | Service status         |
 | Logs Viewer          | http://localhost:3001/logs           | Request history        |
 
-## 📁 Project Structure
+##  Project Structure
 ```
 full-stch/
-├── docker-compose.yml         # Multi-service setup
-├── cron-backend/              # GraphQL API & CRON engine
+├── docker-compose.yml         # multi-service setup
+├── cron-backend/              # graphQL API & CRON engine
 │   ├── src/
 │   └── package.json
-├── cron-frontend/             # React web interface
+├── cron-frontend/             # react web interface
 │   ├── src/
 │   └── package.json
-└── notification-service/      # Webhook receiver
+└── notification-service/      # webhook receiver
     ├── src/
     └── package.json
 ```
@@ -99,7 +100,7 @@ full-stch/
         - **URI:** http://localhost:3001/webhook (local) or http://notification:3001/webhook (Docker)
         - **Method:** POST
         - **Schedule:** */5 * * * * (every 5 minutes)
-        - **Body:** Hello from CRON!
+        - **Body:** Hello from Anas!
         - **Timezone:** Your local timezone
 
 2. **Monitor Execution**
@@ -116,13 +117,13 @@ full-stch/
 | 0 0 * * 0     | Weekly on Sunday midnight   |
 | 0 0 1 * *     | Monthly on the 1st          |
 
-## ⚙️ Configuration
+## ️ Configuration
 
 **Backend (.env):**
 ```env
 NODE_ENV=development
 PORT=4000
-USE_CLUSTER=true
+USE_CLUSTER=true  #false for single instance
 REDIS_HOST=localhost
 REDIS_PORT=6379
 ```
@@ -139,10 +140,10 @@ PORT=3001
 
 **Disable Cluster Mode:** Set `USE_CLUSTER=false` in backend `.env`.
 
-## 🧪 Testing
+##  Testing
 ```bash
 # Test all services
-cd cron-backend && npm test
+cd cron-backend && npm test # if you see a lot of issues when you run tests it jut you are already have redis run on docker you need to shutdown it and make CLUSTER=false in the .env.test
 cd cron-frontend && npm test
 cd notification-service && npm test
 
@@ -150,7 +151,7 @@ cd notification-service && npm test
 npm test
 ```
 
-## 🛑 Stop Services
+##  Stop Services
 ```bash
 # Docker
 docker-compose down
@@ -162,16 +163,16 @@ docker-compose down -v
 Ctrl+C in each terminal
 ```
 
-## ✨ Features
-- ✅ Full CRUD Operations
-- ✅ Real-time Monitoring
-- ✅ Webhook Notifications
-- ✅ Timezone Support
-- ✅ Cluster Ready
-- ✅ Request Logging
-- ✅ GraphQL API
-- ✅ React Frontend
-- ✅ Docker Support
+##  Features
+-  Full CRUD Operations
+-  Real-time Monitoring
+-  Webhook Notifications
+-  Timezone Support
+-  Cluster Ready
+-  Request Logging
+-  GraphQL API
+-  React Frontend
+-  Docker Support
 
 ## 🔧 Troubleshooting
 
@@ -181,28 +182,3 @@ redis-cli ping
 docker run -d --name redis-server -p 6379:6379 redis:alpine
 ```
 Or set `USE_CLUSTER=false` in backend `.env`.
-
-**Port Conflicts**
-```bash
-lsof -i :3000
-lsof -i :4000
-lsof -i :3001
-lsof -i :6379
-```
-
-**Backend Not Starting**
-```bash
-cd cron-backend
-npm run dev
-cat .env
-```
-
-## 📚 API Documentation
-Visit http://localhost:4000/graphql for the interactive GraphQL playground.
-
-## 🤝 Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
