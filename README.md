@@ -182,3 +182,7 @@ redis-cli ping
 docker run -d --name redis-server -p 6379:6379 redis:alpine
 ```
 Or set `USE_CLUSTER=false` in backend `.env`.
+
+![Redis Setup Screenshot](./screenshot/backend-log.png)
+![Redis Setup Screenshot](./screenshot/notification-log.png)
+![Redis Setup Screenshot](./screenshot/screen.png)
