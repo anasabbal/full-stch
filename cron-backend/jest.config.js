@@ -1,22 +1,17 @@
 module.exports = {
-    preset: 'ts-jest',
-    testEnvironment: 'node',
-    roots: ['<rootDir>/src'],
-    testMatch: ['**/__tests__/**/*.test.ts'],
-    collectCoverageFrom: [
-        'src/**/*.ts',
-        '!src/**/*.d.ts',
-        '!src/server.ts',
-    ],
-    setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
-    testTimeout: 30000,
-    maxWorkers: 1,
-    transformIgnorePatterns: [
-        'node_modules/(?!(bullmq|ioredis)/)',
-    ],
-    moduleNameMapping: {
-        '^@/(.*)$': '<rootDir>/src/$1',
+    moduleFileExtensions: ['js', 'json', 'ts'],
+    rootDir: 'src',
+    testRegex: '.*\\.spec\\.ts$',
+    transform: {
+        '^.+\\.(t|j)s$': 'ts-jest',
     },
-    clearMocks: true,
-    restoreMocks: true,
+    collectCoverageFrom: [
+        '**/*.(t|j)s',
+        '!**/*.spec.ts',
+        '!**/*.interface.ts',
+        '!**/index.ts',
+        '!main.ts',
+    ],
+    coverageDirectory: '../coverage',
+    testEnvironment: 'node',
 };

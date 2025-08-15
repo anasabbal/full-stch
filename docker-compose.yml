@@ -13,7 +13,7 @@ services:
 
   backend:
     build: ./cron-backend
-    container_name: backend
+    container_name: backend-nestjs
     ports:
       - "4000:4000"
     environment:
@@ -37,7 +37,7 @@ services:
 
   notification:
     build: ./notification-service
-    container_name: notification
+    container_name: notification-nestjs
     ports:
       - "3001:3001"
     environment:

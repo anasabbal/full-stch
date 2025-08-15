@@ -1,36 +1,43 @@
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as cron from 'node-cron';
 import { Queue, Worker, Job } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
-import moment from 'moment-timezone';
-import { CronJob, CreateCronInput, UpdateCronInput } from '../types';
-import CronJobModel from '../models/CronJob';
-import NotificationService from './NotificationService';
-import { getRedisClient } from '../config/database';
-import dotenv from 'dotenv';
+import * as moment from 'moment-timezone';
+import { CronJob, ServiceStatus } from '../types/cron-job.interface';
+import { CreateCronJobDto } from '../dto/create-cron-job.dto';
+import { UpdateCronJobDto } from '../dto/update-cron-job.dto';
+import { CronJobModel } from '../models/cron-job.model';
+import { NotificationService } from './notification.service';
+import { DatabaseService } from '../config/database.service';
 
-dotenv.config();
-
-/**
- * CronJobManager - Manages CRON job scheduling and execution
- * Supports both single-instance (node-cron) and cluster mode (BullMQ + Redis)
- */
-class CronJobManager {
+@Injectable()
+export class CronJobManagerService implements OnModuleInit, OnModuleDestroy {
+    private readonly logger = new Logger(CronJobManagerService.name);
     private tasks: Map<string, cron.ScheduledTask> = new Map();
     private cronQueue: Queue | null = null;
     private worker: Worker | null = null;
     private isInitialized: boolean = false;
 
-    constructor() {
-        this.initializeClusterSupport();
+    constructor(
+        private configService: ConfigService,
+        private cronJobModel: CronJobModel,
+        private notificationService: NotificationService,
+        private databaseService: DatabaseService,
+    ) {}
+
+    async onModuleInit() {
+        await this.initializeClusterSupport();
     }
 
-    /**
-     * initialize BullMQ cluster support if enabled
-     */
+    async onModuleDestroy() {
+        await this.shutdown();
+    }
+
     private async initializeClusterSupport(): Promise<void> {
-        if (process.env.USE_CLUSTER === 'true') {
+        if (this.configService.get('USE_CLUSTER') === 'true') {
             try {
-                const redis = await getRedisClient();
+                const redis = await this.databaseService.getRedisClient();
                 if (redis) {
                     this.cronQueue = new Queue('cron-jobs', { connection: redis });
 
@@ -40,69 +47,58 @@ class CronJobManager {
                     }, { connection: redis });
 
                     this.isInitialized = true;
-                    console.log('✅ BullMQ cluster support initialized');
+                    this.logger.log('✅ BullMQ cluster support initialized');
                 }
             } catch (error) {
-                console.error('❌ Failed to initialize cluster support:', error);
+                this.logger.error('❌ Failed to initialize cluster support:', error);
                 this.isInitialized = false;
             }
         } else {
             this.isInitialized = true;
-            console.log('✅ Single-instance mode initialized');
+            this.logger.log('✅ Single-instance mode initialized');
         }
     }
 
-    /**
-     * execute a CRON job by ID
-     */
     private async executeCronJob(cronJobId: string): Promise<void> {
-        const cronJob = CronJobModel.findById(cronJobId);
+        const cronJob = this.cronJobModel.findById(cronJobId);
 
         if (cronJob && cronJob.isActive) {
             try {
-                await NotificationService.notify(cronJob.uri, cronJob.httpMethod, cronJob.body);
+                await this.notificationService.notify(cronJob.uri, cronJob.httpMethod, cronJob.body);
 
-                // update both lastRun AND nextRun after execution
                 const now = new Date();
                 const nextRun = this.calculateNextRunTime(cronJob.schedule, cronJob.timeZone);
 
-                CronJobModel.update(cronJobId, {
+                this.cronJobModel.update(cronJobId, {
                     lastRun: now,
                     nextRun: nextRun
                 });
 
-                console.log(`✅ CRON job ${cronJobId} executed successfully. Next run: ${nextRun}`);
+                this.logger.log(`✅ CRON job ${cronJobId} executed successfully. Next run: ${nextRun}`);
             } catch (error) {
-                console.error(`❌ CRON job ${cronJobId} failed:`, error);
+                this.logger.error(`❌ CRON job ${cronJobId} failed:`, error);
             }
         }
     }
 
-    /**
-     * parse CRON expression and calculate next execution time
-     */
     private calculateNextRunTime(schedule: string, timeZone: string): Date | undefined {
         try {
-            // parse CRON expression (5 fields: minute hour day month weekday)
             const cronParts = schedule.trim().split(/\s+/);
             if (cronParts.length !== 5) {
-                console.error('Invalid CRON expression:', schedule);
+                this.logger.error('Invalid CRON expression:', schedule);
                 return undefined;
             }
 
             const [minute, hour, day, month, weekday] = cronParts;
 
-            // get current time in the specified timezone
-            const now = moment.tz(timeZone);
+            // Use moment-timezone properly
+            const now = moment().tz(timeZone || 'UTC');
             let nextRun = now.clone();
 
-            // handle different CRON patterns
             if (schedule === '* * * * *') {
-                // Every minute
                 return nextRun.add(1, 'minute').seconds(0).milliseconds(0).toDate();
             }
 
-            // handle */N patterns (every N minutes/hours/etc)
             if (minute.startsWith('*/')) {
                 const interval = parseInt(minute.substring(2));
                 const currentMinute = now.minute();
@@ -110,7 +106,6 @@ class CronJobManager {
 
                 nextRun.minute(nextMinute).second(0).millisecond(0);
 
-                // of we've gone past 59 minutes, move to next hour
                 if (nextMinute >= 60) {
                     nextRun.add(1, 'hour').minute(nextMinute - 60);
                 }
@@ -118,7 +113,6 @@ class CronJobManager {
                 return nextRun.toDate();
             }
 
-            // Handle specific minute values
             if (minute !== '*') {
                 const targetMinute = parseInt(minute);
                 if (targetMinute > now.minute()) {
@@ -128,7 +122,6 @@ class CronJobManager {
                 }
             }
 
-            // handle hour patterns
             if (hour !== '*') {
                 if (hour.startsWith('*/')) {
                     const interval = parseInt(hour.substring(2));
@@ -149,20 +142,22 @@ class CronJobManager {
                     }
                 }
             }
-            return nextRun.toDate();
 
+            return nextRun.toDate();
         } catch (error) {
-            console.error('Failed to calculate next run time:', error);
-            // Fallback: add 1 minute
-            return moment.tz(timeZone).add(1, 'minute').toDate();
+            this.logger.error('Failed to calculate next run time:', error);
+            // Fallback: add 1 minute from current time in specified timezone
+            try {
+                return moment().tz(timeZone || 'UTC').add(1, 'minute').toDate();
+            } catch (fallbackError) {
+                this.logger.error('Fallback calculation also failed:', fallbackError);
+                // Ultimate fallback: add 1 minute from current UTC time
+                return new Date(Date.now() + 60000);
+            }
         }
     }
 
-    /**
-     * create a new CRON job
-     */
-    async createCronJob(input: CreateCronInput): Promise<CronJob> {
-        // validate CRON expression
+    async createCronJob(input: CreateCronJobDto): Promise<CronJob> {
         if (!cron.validate(input.schedule)) {
             throw new Error('Invalid CRON expression');
         }
@@ -170,52 +165,59 @@ class CronJobManager {
         const id = uuidv4();
         const now = new Date();
 
+        // Validate timezone
+        const validatedTimeZone = this.validateTimeZone(input.timeZone);
+
         const cronJob: CronJob = {
             id,
             ...input,
+            timeZone: validatedTimeZone,
             isActive: true,
             createdAt: now,
             updatedAt: now,
-            nextRun: this.calculateNextRunTime(input.schedule, input.timeZone),
+            nextRun: this.calculateNextRunTime(input.schedule, validatedTimeZone),
         };
 
-        // save to model
-        CronJobModel.create(cronJob);
-
-        // schedule the job
+        this.cronJobModel.create(cronJob);
         await this.scheduleJob(cronJob);
 
-        console.log(`✅ Created CRON job ${id} with schedule: ${input.schedule}`);
-        console.log(`📅 Next run calculated as: ${cronJob.nextRun}`);
+        this.logger.log(`✅ Created CRON job ${id} with schedule: ${input.schedule}`);
+        this.logger.log(`📅 Next run calculated as: ${cronJob.nextRun}`);
         return cronJob;
     }
 
-    /**
-     * Update an existing CRON job
-     */
-    async updateCronJob(input: UpdateCronInput): Promise<CronJob | null> {
-        const existingJob = CronJobModel.findById(input.id);
+    private validateTimeZone(timeZone: string): string {
+        try {
+            // Test if the timezone is valid by creating a moment with it
+            moment().tz(timeZone);
+            return timeZone;
+        } catch (error) {
+            this.logger.warn(`Invalid timezone ${timeZone}, falling back to UTC`);
+            return 'UTC';
+        }
+    }
+
+    async updateCronJob(input: UpdateCronJobDto): Promise<CronJob | null> {
+        const existingJob = this.cronJobModel.findById(input.id);
         if (!existingJob) {
             throw new Error(`CRON job with id ${input.id} not found`);
         }
 
-        // validate CRON expression if provided
         if (input.schedule && !cron.validate(input.schedule)) {
             throw new Error('Invalid CRON expression');
         }
 
-        // stop existing task
         await this.unscheduleJob(input.id);
 
-        // calculate new next run time if schedule changed
         let nextRun = existingJob.nextRun;
         if (input.schedule) {
-            nextRun = this.calculateNextRunTime(input.schedule, input.timeZone || existingJob.timeZone);
+            const validatedTimeZone = input.timeZone ? this.validateTimeZone(input.timeZone) : existingJob.timeZone;
+            nextRun = this.calculateNextRunTime(input.schedule, validatedTimeZone);
         }
 
-        // update job
-        const updatedJob = CronJobModel.update(input.id, {
+        const updatedJob = this.cronJobModel.update(input.id, {
             ...input,
+            ...(input.timeZone && { timeZone: this.validateTimeZone(input.timeZone) }),
             nextRun: nextRun,
         });
 
@@ -223,63 +225,45 @@ class CronJobManager {
             await this.scheduleJob(updatedJob);
         }
 
-        console.log(`✅ Updated CRON job ${input.id}`);
+        this.logger.log(`✅ Updated CRON job ${input.id}`);
         if (input.schedule) {
-            console.log(`📅 New next run calculated as: ${nextRun}`);
+            this.logger.log(`📅 New next run calculated as: ${nextRun}`);
         }
         return updatedJob;
     }
 
-    /**
-     * delete a CRON job
-     */
     async deleteCronJob(id: string): Promise<boolean> {
-        const job = CronJobModel.findById(id);
+        const job = this.cronJobModel.findById(id);
         if (!job) {
             return false;
         }
 
-        // stop task
         await this.unscheduleJob(id);
-
-        // remove from model
-        const deleted = CronJobModel.delete(id);
+        const deleted = this.cronJobModel.delete(id);
 
         if (deleted) {
-            console.log(`✅ Deleted CRON job ${id}`);
+            this.logger.log(`✅ Deleted CRON job ${id}`);
         }
 
         return deleted;
     }
 
-    /**
-     * get all CRON jobs
-     */
     getAllCronJobs(): CronJob[] {
-        return CronJobModel.findAll();
+        return this.cronJobModel.findAll();
     }
 
-    /**
-     * get a specific CRON job by ID
-     */
     getCronJobById(id: string): CronJob | null {
-        return CronJobModel.findById(id) || null;
+        return this.cronJobModel.findById(id) || null;
     }
 
-    /**
-     * schedule a CRON job using appropriate scheduler
-     */
     private async scheduleJob(cronJob: CronJob): Promise<void> {
-        if (this.cronQueue && process.env.USE_CLUSTER === 'true') {
+        if (this.cronQueue && this.configService.get('USE_CLUSTER') === 'true') {
             await this.scheduleWithBullMQ(cronJob);
         } else {
             await this.scheduleWithNodeCron(cronJob);
         }
     }
 
-    /**
-     * schedule job using BullMQ (cluster mode)
-     */
     private async scheduleWithBullMQ(cronJob: CronJob): Promise<void> {
         try {
             if (!this.cronQueue) {
@@ -299,16 +283,13 @@ class CronJobManager {
                     removeOnFail: 10,
                 }
             );
-            console.log(`📅 Scheduled CRON job ${cronJob.id} with BullMQ`);
+            this.logger.log(`📅 Scheduled CRON job ${cronJob.id} with BullMQ`);
         } catch (error) {
-            console.error(`❌ Failed to schedule job ${cronJob.id} with BullMQ:`, error);
+            this.logger.error(`❌ Failed to schedule job ${cronJob.id} with BullMQ:`, error);
             throw error;
         }
     }
 
-    /**
-     * schedule job using node-cron (single instance mode)
-     */
     private async scheduleWithNodeCron(cronJob: CronJob): Promise<void> {
         try {
             const task = cron.schedule(
@@ -323,69 +304,48 @@ class CronJobManager {
             );
 
             this.tasks.set(cronJob.id, task);
-            console.log(`📅 Scheduled CRON job ${cronJob.id} with node-cron`);
+            this.logger.log(`📅 Scheduled CRON job ${cronJob.id} with node-cron`);
         } catch (error) {
-            console.error(`❌ Failed to schedule job ${cronJob.id} with node-cron:`, error);
+            this.logger.error(`❌ Failed to schedule job ${cronJob.id} with node-cron:`, error);
             throw error;
         }
     }
 
-    /**
-     * unschedule a CRON job
-     */
     private async unscheduleJob(id: string): Promise<void> {
-        if (this.cronQueue && process.env.USE_CLUSTER === 'true') {
+        if (this.cronQueue && this.configService.get('USE_CLUSTER') === 'true') {
             await this.unscheduleFromBullMQ(id);
         } else {
             await this.unscheduleFromNodeCron(id);
         }
     }
 
-    /**
-     * remove job from BullMQ
-     */
     private async unscheduleFromBullMQ(id: string): Promise<void> {
         try {
             if (!this.cronQueue) return;
 
-            // get all repeatable jobs
             const repeatableJobs = await this.cronQueue.getRepeatableJobs();
-
-            // find the specific job by ID or name
             const jobToRemove = repeatableJobs.find(job => {
                 return job.id === id || job.name === `cron-${id}`;
             });
 
             if (jobToRemove) {
-                // prepare removal options with proper type handling
                 const removeOptions: { pattern?: string; tz?: string } = {
                     pattern: jobToRemove.pattern,
                 };
 
-                // only add timezone if it's not null and not undefined
                 if (jobToRemove.tz) {
                     removeOptions.tz = jobToRemove.tz;
                 }
 
-                // remove the repeatable job
                 await this.cronQueue.removeRepeatable(
                     jobToRemove.name || `cron-${id}`,
                     removeOptions,
                     jobToRemove.id || undefined
                 );
 
-                console.log(`🛑 Unscheduled BullMQ job ${id}`);
-            } else {
-                // fallback: try to remove by name pattern
-                try {
-                    await this.cronQueue.removeRepeatable(`cron-${id}`, {});
-                    console.log(`🛑 Unscheduled BullMQ job ${id} (fallback method)`);
-                } catch (fallbackError) {
-                    console.warn(`⚠️ Could not find repeatable job ${id} to remove`);
-                }
+                this.logger.log(`🛑 Unscheduled BullMQ job ${id}`);
             }
 
-            // clean up any remaining jobs with this cronJobId
             const jobTypes = ['waiting', 'delayed', 'active', 'completed', 'failed'] as const;
             for (const jobType of jobTypes) {
                 try {
@@ -396,78 +356,53 @@ class CronJobManager {
 
                     for (const job of jobsToRemove) {
                         await job.remove();
-                        console.log(`🛑 Removed ${jobType} job for CRON ${id}`);
                     }
                 } catch (cleanupError) {
-                    // ignore cleanup errors for non-critical operations
-                    console.debug(`Debug: Could not clean ${jobType} jobs for ${id}`);
+                    // Ignore cleanup errors
                 }
             }
-
         } catch (error) {
-            console.error(`❌ Failed to unschedule BullMQ job ${id}:`, error);
+            this.logger.error(`❌ Failed to unschedule BullMQ job ${id}:`, error);
         }
     }
 
-    /**
-     * stop node-cron task
-     */
     private async unscheduleFromNodeCron(id: string): Promise<void> {
         const task = this.tasks.get(id);
         if (task) {
             task.stop();
             this.tasks.delete(id);
-            console.log(`🛑 Unscheduled node-cron job ${id}`);
+            this.logger.log(`🛑 Unscheduled node-cron job ${id}`);
         }
     }
 
-    /**
-     * get service status
-     */
-    getServiceStatus(): {
-        isInitialized: boolean;
-        clusterMode: boolean;
-        activeTasks: number;
-        totalJobs: number;
-    } {
+    getServiceStatus(): ServiceStatus {
         return {
             isInitialized: this.isInitialized,
-            clusterMode: process.env.USE_CLUSTER === 'true',
+            clusterMode: this.configService.get('USE_CLUSTER') === 'true',
             activeTasks: this.tasks.size,
-            totalJobs: CronJobModel.findAll().length,
+            totalJobs: this.cronJobModel.findAll().length,
         };
     }
 
-    /**
-     * gracefully shutdown the service
-     */
     async shutdown(): Promise<void> {
-        console.log('🔄 Shutting down CRON job manager...');
+        this.logger.log('🔄 Shutting down CRON job manager...');
 
-        // stop all node-cron tasks
         for (const [id, task] of this.tasks) {
             task.stop();
-            console.log(`🛑 Stopped task ${id}`);
+            this.logger.log(`🛑 Stopped task ${id}`);
         }
         this.tasks.clear();
 
-        // close BullMQ connections
         if (this.worker) {
             await this.worker.close();
-            console.log('🛑 Closed BullMQ worker');
+            this.logger.log('🛑 Closed BullMQ worker');
         }
         if (this.cronQueue) {
             await this.cronQueue.close();
-            console.log('🛑 Closed BullMQ queue');
+            this.logger.log('🛑 Closed BullMQ queue');
         }
 
         this.isInitialized = false;
-        console.log('✅ CRON job manager shutdown complete');
+        this.logger.log('✅ CRON job manager shutdown complete');
     }
 }
-
-export const cronJobManager = new CronJobManager();
-
-export { CronJobManager };
-
-export default cronJobManager;
