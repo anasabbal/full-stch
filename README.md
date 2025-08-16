@@ -6,7 +6,7 @@ A complete CRON job management system with GraphQL backend, React frontend, and 
 
 ### Prerequisites
 - **Docker & Docker Compose** (recommended)
-- **Node.js 18+** (for local development)
+- **Nest.js** (for local development)
 - **Redis** (for cluster mode - see local setup below)
 
 ### Option 1: Docker (Recommended)

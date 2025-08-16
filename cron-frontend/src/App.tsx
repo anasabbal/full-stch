@@ -177,6 +177,12 @@ const MainContent: React.FC = () => {
                                     http://notification:3001/logs
                                 </code>
                             </div>
+                            <div>
+                                <strong className="text-gray-700">Production notification service (NestJs):</strong>
+                                <code className="block bg-gray-100 p-2 rounded mt-1 text-xs">
+                                    http://notification-nestjs:3001/webhook
+                                </code>
+                            </div>
                         </div>
                     </div>
                 </div>
