@@ -1,4 +1,5 @@
 import express from 'express';
+import { setupSwagger } from './config/swagger';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
 import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer';
@@ -55,8 +56,20 @@ async function startServer() {
     }));
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
+    setupSwagger(app);
 
-    // health check endpoint
+    /**
+     * @swagger
+     * /health:
+     *   get:
+     *     summary: Health check
+     *     description: Check if the CRON service is running properly
+     *     responses:
+     *       200:
+     *         description: Service is healthy
+     *       500:
+     *         description: Service error
+     */
     app.get('/health', (req, res) => {
         try {
             const status = cronJobManager.getServiceStatus();
@@ -76,7 +89,18 @@ async function startServer() {
         }
     });
 
-    // service status endpoint
+    /**
+     * @swagger
+     * /status:
+     *   get:
+     *     summary: Service status
+     *     description: Get detailed service status including memory and job info
+     *     responses:
+     *       200:
+     *         description: Detailed service status
+     *       500:
+     *         description: Failed to get status
+     */
     app.get('/status', (req, res) => {
         try {
             const status = cronJobManager.getServiceStatus();

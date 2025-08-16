@@ -3,6 +3,8 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { setupSwagger } from './config/swagger';
+
 
 dotenv.config();
 
@@ -13,6 +15,7 @@ const port = parseInt(process.env.PORT || '3001', 10);
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+setupSwagger(app);
 
 // ensure logs directory exists
 const logsDir = path.join(__dirname, '../logs');
@@ -73,7 +76,16 @@ const logRequest = (req: express.Request, method: string, body?: any) => {
     return logEntry;
 };
 
-// root endpoint - provides service info and available endpoints
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: Service information
+ *     description: Get service info and available endpoints
+ *     responses:
+ *       200:
+ *         description: Service information
+ */
 app.get('/', (req, res) => {
     res.json({
         service: 'cron notification service',
@@ -89,7 +101,43 @@ app.get('/', (req, res) => {
     });
 });
 
-// main webhook endpoint accepts all http methods and logs incoming notifications
+
+/**
+ * @swagger
+ * /webhook:
+ *   post:
+ *     summary: Webhook endpoint
+ *     description: Receive webhook notifications from CRON jobs
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               message:
+ *                 type: string
+ *                 example: "CRON job completed successfully"
+ *     responses:
+ *       200:
+ *         description: Notification received successfully
+ *       500:
+ *         description: Internal server error
+ *   get:
+ *     summary: Test webhook (GET)
+ *     responses:
+ *       200:
+ *         description: GET webhook test successful
+ *   put:
+ *     summary: Test webhook (PUT)
+ *     responses:
+ *       200:
+ *         description: PUT webhook test successful
+ *   delete:
+ *     summary: Test webhook (DELETE)
+ *     responses:
+ *       200:
+ *         description: DELETE webhook test successful
+ */
 app.all('/webhook', (req, res) => {
     try {
         const logEntry = logRequest(req, req.method, req.body);
@@ -132,7 +180,16 @@ app.delete('/test', (req, res) => {
     res.json({ message: 'delete test successful', ...logEntry });
 });
 
-// health check endpoint returns service status and system metrics
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Health check
+ *     description: Get service health status and metrics
+ *     responses:
+ *       200:
+ *         description: Service is healthy
+ */
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
@@ -144,7 +201,31 @@ app.get('/health', (req, res) => {
     });
 });
 
-// logs endpoint returns recent log entries from log files
+/**
+ * @swagger
+ * /logs:
+ *   get:
+ *     summary: Get logs
+ *     description: Retrieve recent log entries
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Number of log entries to return
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date for logs (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: Log entries retrieved successfully
+ *       500:
+ *         description: Failed to read logs
+ */
 app.get('/logs', (req, res) => {
     try {
         const limit = parseInt(req.query.limit as string) || 50;
