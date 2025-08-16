@@ -56,7 +56,7 @@ Nootification Service
 # Backend (terminal 1)
 cd cron-backend
 npm install
-npm run dev                    # Runs on :4000
+nest start --watch                    # Runs on :4000
 # Frontend (terminal 2)
 cd cron-frontend
 npm install
@@ -64,7 +64,7 @@ npm run dev                    # Runs on :3000
 # Notification Service (terminal 3)
 cd notification-service
 npm install
-npm run dev                    # Runs on :3001
+nest start --watch                    # Runs on :3001
 ```
 
 ###  Service URLs
@@ -143,12 +143,10 @@ PORT=3001
 ##  Testing
 ```bash
 # Test all services
-cd cron-backend && npm test # if you see a lot of issues when you run tests it jut you are already have redis run on docker you need to shutdown it and make CLUSTER=false in the .env.test
+cd cron-backend && jest # if you see a lot of issues when you run tests it jut you are already have redis run on docker you need to shutdown it and make CLUSTER=false in the .env.test
 cd cron-frontend && npm test
-cd notification-service && npm test
+cd notification-service && jest
 
-# Or test individually
-npm test
 ```
 
 ##  Stop Services
