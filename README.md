@@ -9,6 +9,12 @@ A complete CRON job management system with GraphQL backend, React frontend, and 
 - **Node.js 18+** (for local development)
 - **Redis** (for cluster mode - see local setup below)
 
+- ---
+
+## Alternative Implementation
+
+This repository also includes a **NestJS-based implementation** available on the [`nestjs`](https://github.com/anasabbal/full-stch/tree/nestjs) branch.  
+
 ### Option 1: Docker (Recommended)
 ```bash
 # Navigate to project root
