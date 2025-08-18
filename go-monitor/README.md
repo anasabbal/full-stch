@@ -38,5 +38,10 @@ go mod tidy
 # Run the monitor
 go run main.go
 ```
+# Monitoring Screenshots
 
-![Monitoring Screenshot](./screenshot/monitoring.png)
+## Before Adding the Cron Job
+![Monitoring Before Cron Job](./screenshot/monitoring.png)
+
+## After Adding the Cron Job
+![Monitoring After Cron Job](./screenshot/monitoring-01.png)
