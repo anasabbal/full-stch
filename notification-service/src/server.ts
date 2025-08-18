@@ -294,14 +294,19 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
     });
 });
 
-// start server and log endpoints
-const server = app.listen(port, '0.0.0.0', () => {
-    console.log(`🎯 notification service running at http://localhost:${port}`);
-    console.log(`📋 main webhook endpoint: http://localhost:${port}/webhook`);
-    console.log(`🏥 health check: http://localhost:${port}/health`);
-    console.log(`🧪 test endpoints: http://localhost:${port}/test`);
-    console.log(`📁 logs directory: ${logsDir}`);
-});
+// declare server variable
+let server: any = null;
+
+// only start server if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+    server = app.listen(port, '0.0.0.0', () => {
+        console.log(`🎯 notification service running at http://localhost:${port}`);
+        console.log(`📋 main webhook endpoint: http://localhost:${port}/webhook`);
+        console.log(`🏥 health check: http://localhost:${port}/health`);
+        console.log(`🧪 test endpoints: http://localhost:${port}/test`);
+        console.log(`📁 logs directory: ${logsDir}`);
+    });
+}
 
 /**
  * gracefully shuts down the server on termination signals
@@ -309,28 +314,38 @@ const server = app.listen(port, '0.0.0.0', () => {
  */
 const gracefulShutdown = (signal: string) => {
     console.log(`\n${signal} received, shutting down gracefully...`);
-    server.close((err) => {
-        if (err) {
-            console.error('❌ error during shutdown:', err);
-            process.exit(1);
-        }
+
+    if (server) {
+        server.close((err: any) => {
+            if (err) {
+                console.error('❌ error during shutdown:', err);
+                process.exit(1);
+            }
+            console.log('✅ notification service shut down successfully');
+            process.exit(0);
+        });
+    } else {
         console.log('✅ notification service shut down successfully');
         process.exit(0);
-    });
+    }
 };
 
-// signal handlers for graceful shutdown
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+// only set up signal handlers if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+    // signal handlers for graceful shutdown
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ unhandled rejection at:', promise, 'reason:', reason);
-});
+    // handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('❌ unhandled rejection at:', promise, 'reason:', reason);
+    });
 
-// handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-    console.error('❌ uncaught exception:', error);
-});
+    // handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+        console.error('❌ uncaught exception:', error);
+    });
+}
 
 export default app;
+export { server };
