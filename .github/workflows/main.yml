@@ -20,12 +20,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js for Backend
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: cron-backend/package-lock.json
 
       - name: Install and Test Backend
         working-directory: cron-backend
@@ -37,13 +35,6 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
 
-      - name: Setup Node.js for Frontend
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: cron-frontend/package-lock.json
-
       - name: Install and Test Frontend
         working-directory: cron-frontend
         run: |
@@ -54,20 +45,12 @@ jobs:
         working-directory: cron-frontend
         run: npm run build
 
-      - name: Setup Node.js for Notification Service
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: notification-service/package-lock.json
-
       - name: Install and Test Notification Service
         working-directory: notification-service
         run: |
           npm install
           npm test
 
-      # --- Docker Build ---
       - name: Build with Docker
         if: github.ref == 'refs/heads/master'
         run: docker-compose build
