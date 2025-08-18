@@ -51,9 +51,12 @@ jobs:
           npm install
           npm test
 
+      - name: Set up Docker CLI
+        uses: docker/setup-buildx-action@v3
+
       - name: Build with Docker
         if: github.ref == 'refs/heads/master'
-        run: docker-compose build
+        run: docker compose build
 
   deploy:
     needs: test-and-build
