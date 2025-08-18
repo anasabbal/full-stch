@@ -1,4 +1,4 @@
-name: Simple CI/CD
+name: workflow
 
 on:
   push:
@@ -20,15 +20,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js for Backend
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: cron-backend/package-lock.json
 
       - name: Install and Test Backend
+        working-directory: cron-backend
         run: |
-          cd cron-backend
           npm install
           npm test
         env:
@@ -36,23 +37,37 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
 
+      - name: Setup Node.js for Frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: cron-frontend/package-lock.json
+
       - name: Install and Test Frontend
+        working-directory: cron-frontend
         run: |
-          cd cron-frontend
           npm install
           npm test -- --watchAll=false
 
+      - name: Build Frontend
+        working-directory: cron-frontend
+        run: npm run build
+
+      - name: Setup Node.js for Notification Service
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: notification-service/package-lock.json
+
       - name: Install and Test Notification Service
+        working-directory: notification-service
         run: |
-          cd notification-service
           npm install
           npm test
 
-      - name: Build Frontend
-        run: |
-          cd cron-frontend
-          npm run build
-
+      # --- Docker Build ---
       - name: Build with Docker
         if: github.ref == 'refs/heads/master'
         run: docker-compose build
