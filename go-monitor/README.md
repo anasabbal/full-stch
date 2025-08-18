@@ -38,3 +38,5 @@ go mod tidy
 # Run the monitor
 go run main.go
 ```
+
+![Redis Setup Screenshot](./screenshot/monitoring.png)
