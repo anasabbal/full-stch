@@ -39,4 +39,4 @@ go mod tidy
 go run main.go
 ```
 
-![Redis Setup Screenshot](./screenshot/monitoring.png)
+![Monitoring Screenshot](./screenshot/monitoring.png)
