@@ -1,0 +1,70 @@
+name: Simple CI/CD
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install and Test Backend
+        run: |
+          cd cron-backend
+          npm install
+          npm test
+        env:
+          USE_CLUSTER: false
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+      - name: Install and Test Frontend
+        run: |
+          cd cron-frontend
+          npm install
+          npm test -- --watchAll=false
+
+      - name: Install and Test Notification Service
+        run: |
+          cd notification-service
+          npm install
+          npm test
+
+      - name: Build Frontend
+        run: |
+          cd cron-frontend
+          npm run build
+
+      - name: Build with Docker
+        if: github.ref == 'refs/heads/master'
+        run: docker-compose build
+
+  deploy:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Deploy
+        run: echo "Ready to deploy!"
